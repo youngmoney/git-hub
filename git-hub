@@ -55,6 +55,12 @@ function hub::list_repo() {
     curl https://api.github.com/users/"$(hub::user)"/repos -s | sed -n -e 's!.*git://.*/\([^/]*\).git.*!\1!p'
 }
 
+function hub::open_repo() {
+    user="$(hub::user)"
+    repo="$(hub::repo_or "$1")"
+    hub::open_url "https://github.com/$user/$repo"
+}
+
 a="$1"
 b="$2"
 shift
@@ -65,8 +71,11 @@ elif [ "$a" == "repo" ] && [ "$b" == "upstream" ]; then
     hub::upstream "$@"
 elif [ "$a" == "repo" ] && [ "$b" == "list" ]; then
     hub::list_repo "$@"
+elif [ "$a" == "repo" ] && [ "$b" == "open" ]; then
+    hub::open_repo "$@"
 else
-    echo "repo new <repo>: open github's new repo page"
-    echo "repo upstream <repo>: attach to an existing github repo"
+    echo "repo new [repo]: open github's new repo page"
+    echo "repo upstream [repo]: attach to an existing github repo"
     echo "repo list: list all repos"
+    echo "repo open [repo]: open the repo's URL"
 fi
