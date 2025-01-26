@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+
+function hub::confirm() {
+    read -p "$@ " -n 1 -r
+    echo
+    [[ $REPLY =~ ^[Yy]$ ]]
+}
+
+function hub::repo_or() {
+    repo="$1"
+    if [ "$repo" == "" ]; then
+        repo="$(basename $(pwd))"
+    fi
+    echo "$repo"
+}
+
+function hub::open_url() {
+    command -v open &>/dev/null && open "$@" || xdg-open "$@"
+}
+
+function hub::user() {
+    hubuser="$(git config --get github.user)"
+    if [ "$hubuser" == "" ]; then
+        echo no github username defined
+        echo "git config --set github.user <username>"
+        exit 1
+    fi
+    echo "$hubuser"
+}
+
+function hub::new_repo() {
+    repo="$(hub::repo_or "$1")"
+    user="$(hub::user)"
+    hub::open_url "https://github.com/new?name=$repo&owner=$user"
+    hub::upstream "$repo"
+}
+
+function hub::upstream() {
+    repo="$(hub::repo_or "$1")"
+    remote="git@github.com:$(hub::user)/$repo.git"
+    if hub::confirm "add $remote as upstream?"; then
+        git remote add github "$remote"
+        branch="$(git branch --show-current)"
+        if [  "$branch" != "main" ] && hub::confirm "rename branch $branch to main?"; then
+            git branch -M main
+            branch=main
+        fi
+        if hub::confirm "push?"; then
+            git push -u github "$branch"
+        fi
+    fi
+}
+
+function hub::list_repo() {
+    curl https://api.github.com/users/"$(hub::user)"/repos -s | sed -n -e 's!.*git://.*/\([^/]*\).git.*!\1!p'
+}
+
+a="$1"
+b="$2"
+shift
+shift
+if [ "$a" == "repo" ] && [ "$b" == "new" ]; then
+    hub::new_repo "$@"
+elif [ "$a" == "repo" ] && [ "$b" == "upstream" ]; then
+    hub::upstream "$@"
+elif [ "$a" == "repo" ] && [ "$b" == "list" ]; then
+    hub::list_repo "$@"
+else
+    echo "repo new <repo>: open github's new repo page"
+    echo "repo upstream <repo>: attach to an existing github repo"
+    echo "repo list: list all repos"
+fi
