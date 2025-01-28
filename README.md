@@ -35,3 +35,9 @@ git-hub repo upstream [repo]
 ```
 
 This will automatically get called if you confirm after a `new`.
+
+To clone all of your repos into one directory run:
+
+```
+git-hub repo clone-all
+```

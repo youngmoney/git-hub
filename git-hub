@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
+set -o pipefail
+
 function hub::confirm() {
-    read -p "$@ " -n 1 -r
-    echo
-    [[ $REPLY =~ ^[Yy]$ ]]
+    read -p "$@ " -r
+    [[ $REPLY =~ ^[Yy] ]]
 }
 
 function hub::repo_or() {
@@ -38,27 +39,55 @@ function hub::new_repo() {
 function hub::upstream() {
     repo="$(hub::repo_or "$1")"
     remote="git@github.com:$(hub::user)/$repo.git"
-    if hub::confirm "add $remote as upstream?"; then
-        git remote add github "$remote"
-        branch="$(git branch --show-current)"
-        if [  "$branch" != "main" ] && hub::confirm "rename branch $branch to main?"; then
-            git branch -M main
-            branch=main
-        fi
-        if hub::confirm "push?"; then
-            git push -u github "$branch"
-        fi
+
+    hub::confirm "add $remote as upstream?" || exit
+    git remote add github "$remote"
+
+    branch="$(git branch --show-current)"
+    if [  "$branch" != "main" ] && hub::confirm "rename branch $branch to main?"; then
+        git branch -M main
+        branch=main
     fi
+
+    hub::confirm "push?" || exit
+    git push -u github "$branch"
 }
 
 function hub::list_repo() {
-    curl https://api.github.com/users/"$(hub::user)"/repos -s | sed -n -e 's!.*git://.*/\([^/]*\).git.*!\1!p'
+    curl https://api.github.com/users/"$(hub::user)"/repos -s -f | sed -n -e 's!.*git://.*/\([^/]*\).git.*!\1!p'
 }
 
 function hub::open_repo() {
     user="$(hub::user)"
     repo="$(hub::repo_or "$1")"
     hub::open_url "https://github.com/$user/$repo"
+}
+
+function hub::clone_all() {
+    directory="$1"
+    if [ ! -d "$directory" ]; then
+        echo "must pass a valid directory"
+        exit 1
+    fi
+    cd "$directory"
+    missing="$(comm  -2 -3 <(hub::list_repo | sort) <(ls | sort) | tr '\n' ' ')"
+    if [ "$missing" == "" ]; then
+        echo "all repos are already cloned locally"
+        exit
+    fi
+    for repo in $missing; do
+        echo "$repo"
+    done
+    echo
+    echo "Destination: $(pwd)/"
+    echo
+    hub::confirm "clone missing repos?" || exit 0
+    for repo in $missing; do
+        echo
+        remote="git@github.com:$(hub::user)/$repo.git"
+        git clone --origin github "$remote"
+    done
+
 }
 
 a="$1"
@@ -73,9 +102,12 @@ elif [ "$a" == "repo" ] && [ "$b" == "list" ]; then
     hub::list_repo "$@"
 elif [ "$a" == "repo" ] && [ "$b" == "open" ]; then
     hub::open_repo "$@"
+elif [ "$a" == "repo" ] && [ "$b" == "clone-all" ]; then
+    hub::clone_all "$@"
 else
     echo "repo new [repo]: open github's new repo page"
     echo "repo upstream [repo]: attach to an existing github repo"
     echo "repo list: list all repos"
     echo "repo open [repo]: open the repo's URL"
+    echo "repo clone-all: clone all repos into the directory, if not already"
 fi
